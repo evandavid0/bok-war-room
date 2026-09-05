@@ -15,9 +15,7 @@ texas='''<section id="texas" class="view">
 
 '''
 if '<section id="texas"' not in s:s=s.replace(anchor,texas+anchor,1)
-# improve market wording
 s=s.replace('${side} ${Math.abs(marketGap).toFixed(1)} pts</div>','${Math.abs(marketGap).toFixed(1)} pts toward ${side}</div>',1)
-# insert function before openIntel
 fn=r'''function renderTexasControl(){
   const games=currentGames(),g=games.find(x=>x.Away==='Texas'||x.Home==='Texas');
   const control=document.getElementById('texasControl'),snap=document.getElementById('texasSnapshot'),drivers=document.getElementById('texasDrivers'),pub=document.getElementById('texasPublish');
@@ -27,8 +25,9 @@ fn=r'''function renderTexasControl(){
   const tr=ratings.find(r=>r.Team==='Texas')||{},oppName=g.Away==='Texas'?g.Home:g.Away,or=ratings.find(r=>r.Team===oppName)||{};
   const texasHome=g.Home==='Texas',homeMargin=Number(g['Home Projected Margin']),texasMargin=texasHome?homeMargin:-homeMargin;
   const vals=ratings.map(r=>Number(r['SP+ Rating'])).filter(Number.isFinite),mean=vals.reduce((a,b)=>a+b,0)/vals.length,sd=Math.sqrt(vals.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(1,vals.length-1));
-  const spHome=.8*(Number((ratings.find(r=>r.Team===g.Home)||{})['SP+ Z'])-Number((ratings.find(r=>r.Team===g.Away)||{})['SP+ Z']))*sd;
-  const talHome=.2*(Number((ratings.find(r=>r.Team===g.Home)||{})['Talent Z'])-Number((ratings.find(r=>r.Team===g.Away)||{})['Talent Z']))*sd;
+  const gr=n=>ratings.find(r=>r.Team===n)||{};
+  const spHome=.8*(Number(gr(g.Home)['SP+ Z'])-Number(gr(g.Away)['SP+ Z']))*sd;
+  const talHome=.2*(Number(gr(g.Home)['Talent Z'])-Number(gr(g.Away)['Talent Z']))*sd;
   const sign=texasHome?1:-1,sp=spHome*sign,tal=talHome*sign,hfa=Number(g['HFA to Home'])*sign;
   const res=(currentWeek().results||{})[gameId(g)];
   control.innerHTML=`<div class="texasHero"><div class="texasMatch"><div><div class="texasTeam">${oppName}</div><div class="mini">V3 #${or['V3 Rank']} · ${Number(or['V3 Rating']).toFixed(1)}</div></div><div class="texasAt">${g['Neutral?']?'VS':'AT'}</div><div><div class="texasTeam right">Texas</div><div class="mini" style="text-align:right">V3 #${tr['V3 Rank']} · ${Number(tr['V3 Rating']).toFixed(1)}</div></div></div><div class="texasCall"><div class="texasMetric"><div class="tlabel">BOK Fair Line</div><div class="tvalue">${g['BOK Fair Line']}</div></div><div class="texasMetric"><div class="tlabel">Official ATS Pick</div><div class="tvalue" style="color:var(--burnt)">${g['ATS Pick']}</div></div><div class="texasMetric"><div class="tlabel">Model Edge</div><div class="tvalue">${Number(g['Model Edge']).toFixed(1)}</div></div></div></div>`;
@@ -41,12 +40,7 @@ fn=r'''function renderTexasControl(){
 
 '''
 if 'function renderTexasControl()' not in s:s=s.replace('function openIntel(id){',fn+'function openIntel(id){',1)
-# make nav render Texas when selected
 s=s.replace("if(b.dataset.view==='autopsy')renderAutopsy(); if(b.dataset.view==='results')renderResults();","if(b.dataset.view==='autopsy')renderAutopsy(); if(b.dataset.view==='results')renderResults(); if(b.dataset.view==='texas')renderTexasControl();",1)
-# ensure renderAll includes it by adding to updateLock render sequence (safe active refresh)
 s=s.replace('renderWar();renderWeekSelector();','renderWar();renderWeekSelector();renderTexasControl();',1)
-p.write_text(s,encoding='utf-8')
-print('Texas Control V0.7 patch applied')
-'''
 p.write_text(s,encoding='utf-8')
 print('Texas Control V0.7 patch applied')
