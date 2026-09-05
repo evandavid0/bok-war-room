@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BOK War Room V0.8.4 — 2026</title>
+<title>BOK War Room V0.8.5 — 2026</title>
 <style>
 :root {
   --burnt:#BF5700; --burnt2:#8f4100; --ink:#151515; --paper:#f6f0e9;
@@ -86,7 +86,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
 <header>
   <div class="topbar">
     <div class="brand"><h1>BOK WAR ROOM</h1><small>Burnt Orange Koolaid · 2026 College Football Command Center</small></div>
-    <div class="status"><span class="pill orange">V3.0 OFFICIAL</span><span class="pill" id="appVersion">APP V0.8.4</span><span class="pill warn" id="lockState">WEEK 1 · PRELIMINARY</span></div>
+    <div class="status"><span class="pill orange">V3.0 OFFICIAL</span><span class="pill" id="appVersion">APP V0.8.5</span><span class="pill warn" id="lockState">WEEK 1 · PRELIMINARY</span></div>
   </div>
   <nav id="nav">
     <button data-view="war" class="active">War Room</button>
@@ -406,17 +406,26 @@ function atsGrade(g,awayScore,homeScore){
 
 function normTeamName(s){return String(s||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,' ').replace(/\b(state|st)\b/g,'state').trim();}
 const TEAM_ALIASES={
- 'ole miss':['ole miss','mississippi'],
  'utep':['utep','texas el paso'],
- 'smu':['smu','southern methodist'],
+ 'oklahoma':['oklahoma','ou'],
+ 'texas state':['texas state','txst'],
+ 'texas':['texas','tex'],
+ 'boise state':['boise state','boise'],
+ 'oregon':['oregon','ore'],
+ 'baylor':['baylor','bay'],
+ 'auburn':['auburn','aub'],
+ 'missouri state':['missouri state','missouri st','most'],
+ 'texas a and m':['texas a and m','texas am','texas a m','texas aandm','tamu'],
+ 'clemson':['clemson','clem'],
  'lsu':['lsu','louisiana state'],
- 'texas a and m':['texas a and m','texas am','texas a m'],
- 'boise state':['boise state'],
- 'missouri state':['missouri state'],
- 'washington state':['washington state'],
- 'florida state':['florida state'],
- 'texas state':['texas state'],
- 'notre dame':['notre dame']
+ 'washington state':['washington state','washington st','wsu'],
+ 'washington':['washington','uw'],
+ 'wisconsin':['wisconsin','wis'],
+ 'notre dame':['notre dame','nd'],
+ 'louisville':['louisville','lou'],
+ 'ole miss':['ole miss','mississippi','miss'],
+ 'smu':['smu','southern methodist'],
+ 'florida state':['florida state','florida st','fsu']
 };
 function bokTeamAliases(name){
   const n=normTeamName(name),out=new Set([n]);
@@ -432,9 +441,26 @@ function teamMatchesBok(bokName,espnTeam){
   const bok=bokTeamAliases(bokName),espn=espnTeamAliases(espnTeam);
   for(const b of bok)for(const e of espn){
     if(b===e)return true;
-    if(e.startsWith(b+' ')||b.startsWith(e+' '))return true;
+    // ESPN displayName often appends a mascot (e.g. "Oklahoma Sooners").
+    // Only allow BOK alias -> ESPN prefix, never the reverse; this prevents
+    // "Texas" from accidentally matching "Texas State".
+    if(e.startsWith(b+' '))return true;
   }
   return false;
+}
+function eventMatchesGame(g,e){
+  const c=e.competitions?.[0]?.competitors||[];
+  const away=c.find(x=>x.homeAway==='away'),home=c.find(x=>x.homeAway==='home');
+  if(away&&home){
+    const direct=teamMatchesBok(g.Away,away.team)&&teamMatchesBok(g.Home,home.team);
+    if(direct)return true;
+    if(g['Neutral?']){
+      const swapped=teamMatchesBok(g.Away,home.team)&&teamMatchesBok(g.Home,away.team);
+      if(swapped)return true;
+    }
+    return false;
+  }
+  return c.length>=2 && c.some(x=>teamMatchesBok(g.Away,x.team)) && c.some(x=>teamMatchesBok(g.Home,x.team));
 }
 async function fetchWeekResults(){
   const wk=currentWeek(),btn=document.getElementById('fetchResultsBtn'),status=document.getElementById('fetchResultsStatus');
@@ -457,10 +483,7 @@ async function fetchWeekResults(){
     const events=[...eventMap.values()];
     let found=0,finals=0,missing=[];
     for(const g of currentGames()){
-      const ev=events.find(e=>{
-        const c=e.competitions?.[0]?.competitors||[];
-        return c.some(x=>teamMatchesBok(g.Away,x.team))&&c.some(x=>teamMatchesBok(g.Home,x.team));
-      });
+      const ev=events.find(e=>eventMatchesGame(g,e));
       if(!ev){missing.push(gameName(g));continue;} found++;
       const comp=ev.competitions?.[0],cs=comp?.competitors||[],away=cs.find(x=>x.homeAway==='away'),home=cs.find(x=>x.homeAway==='home');
       const isFinal=!!(ev.status?.type?.completed||comp?.status?.type?.completed);
@@ -470,7 +493,7 @@ async function fetchWeekResults(){
       wk.results[id]={awayScore,homeScore,grade,enteredAt:new Date().toISOString(),source:'ESPN scoreboard',eventId:ev.id||null}; finals++;
     }
     save();renderResults();renderAutopsy();
-    status.textContent=`${finals} final${finals===1?'':'s'} imported · ${found}/${currentGames().length} slate games matched across ${events.length} ESPN events${missing.length?' · '+missing.length+' unmatched':''}.`;
+    status.textContent=`${finals} final${finals===1?'':'s'} imported · ${found}/${currentGames().length} slate games matched across ${events.length} ESPN events${missing.length?' · unmatched: '+missing.join(' | '):''}.`;
   }catch(e){status.textContent='⚠ '+e.message+' You can still enter scores manually.';}
   finally{btn.disabled=false;}
 }
