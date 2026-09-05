@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BOK War Room V0.5.1 — 2026</title>
+<title>BOK War Room V0.5.3 — 2026</title>
 <style>
 :root {
   --burnt:#BF5700; --burnt2:#8f4100; --ink:#151515; --paper:#f6f0e9;
@@ -153,7 +153,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
     </div></div>
     <div class="panel"><div class="panelhead"><h2>Standings</h2></div><div class="pad" id="standings"></div></div>
   </div>
-  <div class="panel" style="margin-top:18px"><div class="panelhead"><h2>Season Ledger</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="fetchSplashPicksBtn">↻ Fetch Splash Picks</button><button class="btn ghost" id="setSplashUrlBtn">Set Splash URL</button><button class="btn ghost" id="clearPicks">Clear Picks</button></div></div><div class="pad" style="padding-bottom:0"><div id="splashPickStatus" class="footerNote" style="margin-top:0">Syncs picks that Splash has made visible for the active week.</div></div><div class="log" id="pickLog"></div></div>
+  <div class="panel" style="margin-top:18px"><div class="panelhead"><h2>Season Ledger</h2><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="fetchSplashPicksBtn">Import Splash Response</button><button class="btn ghost" id="clearPicks">Clear Picks</button></div></div><div class="pad" style="padding-bottom:0"><div id="splashPickStatus" class="footerNote" style="margin-top:0">Paste the JSON from DevTools → leaderboards → Response. No Splash login token is stored or transmitted.</div></div><div class="log" id="pickLog"></div></div>
 </section>
 
 
@@ -307,7 +307,6 @@ function renderRatings(){
 }
 
 
-const SPLASH_URL_KEY='bok_splash_leaderboard_url';
 function mapSplashPicker(entry){
   const display=String(entry?.entry?.displayName||'').trim();
   const handle=String(entry?.user?.handle||'').trim();
@@ -334,42 +333,33 @@ function splashGameForPick(p){
   const t=normTeamName(p?.team?.name||p?.team?.alias||'');
   return currentGames().find(g=>normTeamName(g.Away)===t||normTeamName(g.Home)===t)||null;
 }
-function configureSplashUrl(){
-  const prior=localStorage.getItem(SPLASH_URL_KEY)||'';
-  const url=prompt('Paste the Request URL for the Splash leaderboards XHR request. This is stored only in this browser.',prior);
-  if(url===null)return false;
-  const clean=url.trim(); if(!/^https?:\/\//i.test(clean)){alert('Please paste the full Request URL from DevTools → Headers → General.');return false;}
-  localStorage.setItem(SPLASH_URL_KEY,clean); return true;
-}
-async function fetchSplashPicks(){
-  const btn=document.getElementById('fetchSplashPicksBtn'),status=document.getElementById('splashPickStatus');
-  let url=localStorage.getItem(SPLASH_URL_KEY)||'';
-  if(!url){if(!configureSplashUrl())return;url=localStorage.getItem(SPLASH_URL_KEY)||'';}
-  btn.disabled=true;status.textContent='Fetching Splash leaderboard…';
-  try{
-    const res=await fetch(url,{credentials:'include'});
-    if(!res.ok)throw new Error(`Splash request failed (${res.status}).`);
-    const payload=await res.json(); const rows=Array.isArray(payload?.data)?payload.data:[];
-    if(!rows.length)throw new Error('Splash returned no leaderboard entries.');
-    let imported=0,visible=0,recognized=0,unmatched=0;
-    for(const row of rows){
-      const picker=mapSplashPicker(row); if(!picker)continue; recognized++;
-      const picks=Array.isArray(row?.picks?.data)?row.picks.data:[];
-      for(const p of picks){
-        visible++;
-        const g=splashGameForPick(p); if(!g){unmatched++;continue;}
-        const game=gameName(g),pick=splashPickText(p),grade=splashGrade(p.grade);
-        const idx=state.staffPicks.findIndex(x=>x.season===2026&&x.week===state.activeWeek&&x.picker===picker&&x.game===game);
-        const rec={season:2026,week:state.activeWeek,picker,game,pick,grade,ts:new Date().toISOString(),source:'Splash leaderboard',splashGameId:p.gameId||null};
-        if(idx>=0)state.staffPicks[idx]={...state.staffPicks[idx],...rec}; else state.staffPicks.push(rec);
-        imported++;
-      }
+function importSplashPayload(payload){
+  const status=document.getElementById('splashPickStatus');
+  const rows=Array.isArray(payload?.data)?payload.data:[];
+  if(!rows.length)throw new Error('Splash response contains no leaderboard entries.');
+  let imported=0,visible=0,recognized=0,unmatched=0;
+  for(const row of rows){
+    const picker=mapSplashPicker(row); if(!picker)continue; recognized++;
+    const picks=Array.isArray(row?.picks?.data)?row.picks.data:[];
+    for(const p of picks){
+      visible++;
+      const g=splashGameForPick(p); if(!g){unmatched++;continue;}
+      const game=gameName(g),pick=splashPickText(p),grade=splashGrade(p.grade);
+      const idx=state.staffPicks.findIndex(x=>x.season===2026&&x.week===state.activeWeek&&x.picker===picker&&x.game===game);
+      const rec={season:2026,week:state.activeWeek,picker,game,pick,grade,ts:new Date().toISOString(),source:'Splash leaderboard response',splashGameId:p.gameId||null};
+      if(idx>=0)state.staffPicks[idx]={...state.staffPicks[idx],...rec}; else state.staffPicks.push(rec);
+      imported++;
     }
-    save();renderStaff();
-    status.textContent=`${imported} pick${imported===1?'':'s'} synced · ${recognized} BOK picker${recognized===1?'':'s'} recognized · ${visible} visible Splash picks${unmatched?' · '+unmatched+' unmatched':''}. Hidden/unlocked picks remain untouched.`;
-  }catch(e){
-    status.textContent='⚠ '+e.message+' If this is a browser/CORS issue, use Set Splash URL to confirm the current leaderboard Request URL.';
-  }finally{btn.disabled=false;}
+  }
+  save();renderStaff();
+  status.textContent=`${imported} pick${imported===1?'':'s'} imported · ${recognized} BOK picker${recognized===1?'':'s'} recognized · ${visible} visible Splash picks${unmatched?' · '+unmatched+' unmatched':''}. Hidden/unlocked picks remain untouched.`;
+}
+function fetchSplashPicks(){
+  const status=document.getElementById('splashPickStatus');
+  const raw=prompt('Paste the full JSON from Splash DevTools → leaderboards request → Response. Do NOT paste Headers, Authorization, cookies, or tokens.');
+  if(raw===null)return;
+  try{ importSplashPayload(JSON.parse(raw.trim())); }
+  catch(e){ status.textContent='⚠ Import failed: '+e.message; }
 }
 
 function renderStaff(){
@@ -537,7 +527,6 @@ function importSeasonFile(file){
   const rd=new FileReader();rd.onload=()=>{try{const p=JSON.parse(rd.result);if(!p.state||!p.state.weeks)throw new Error('Not a BOK season backup');state=normalizeState(p.state);save();renderAll();alert('BOK season imported.');}catch(e){alert('Import failed: '+e.message);}};rd.readAsText(file);
 }
 function renderAll(){syncWeekRatings();renderWeekSelector();document.getElementById('fetchSplashPicksBtn').onclick=fetchSplashPicks;
-document.getElementById('setSplashUrlBtn').onclick=configureSplashUrl;
 document.getElementById('staffGame').innerHTML=currentGames().map(g=>`<option>${gameName(g)}</option>`).join('');renderWar();renderLab();renderRatings();renderStaff();renderResults();renderAutopsy();updateLock();}
 function renderAutopsy(){
  const wk=currentWeek(),results=Object.values(wk.results||{}),w=results.filter(x=>x.grade==='WIN').length,l=results.filter(x=>x.grade==='LOSS').length;
