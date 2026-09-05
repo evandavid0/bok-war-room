@@ -1,0 +1,44 @@
+name: Fix V3 rank derivation
+
+on:
+  push:
+    paths:
+      - '.github/workflows/fix-v3-ranks.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch rank derivation
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html')
+          s=p.read_text(encoding='utf-8')
+          old="const ratings=BASE.ratings;"
+          new="""const ratings=BASE.ratings.map(r=>({...r}));
+[...ratings].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>{ r['V3 Rank']=i+1; });"""
+          if new in s:
+              print('Rank derivation already installed.')
+              raise SystemExit(0)
+          if old not in s:
+              raise RuntimeError('Could not locate ratings declaration')
+          s=s.replace(old,new,1)
+          s=s.replace('BOK War Room V0.3.2 — 2026','BOK War Room V0.3.3 — 2026',1)
+          p.write_text(s,encoding='utf-8')
+          print('Installed deterministic V3 rank derivation.')
+      - name: Commit correction
+        run: |
+          git config user.name "BOK War Room Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "Derive V3 ranks from V3 ratings"
+            git push
+          fi
