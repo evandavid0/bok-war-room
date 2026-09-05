@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BOK War Room V0.3.2 — 2026</title>
+<title>BOK War Room V0.3.3 — 2026</title>
 <style>
 :root {
   --burnt:#BF5700; --burnt2:#8f4100; --ink:#151515; --paper:#f6f0e9;
@@ -207,7 +207,8 @@ function loadState(){
   catch(err){ console.warn('BOK War Room: local storage unavailable.',err); return freshState(); }
 }
 let state=loadState();
-const ratings=BASE.ratings;
+const ratings=BASE.ratings.map(r=>({...r}));
+[...ratings].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>{ r['V3 Rank']=i+1; });
 function currentWeek(){ return state.weeks[String(state.activeWeek)]; }
 function currentGames(){ return currentWeek().games || []; }
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(state));}catch(err){console.warn('Save failed',err);} }
