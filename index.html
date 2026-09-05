@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BOK War Room V0.3.3 — 2026</title>
+<title>BOK War Room V0.4 — 2026</title>
 <style>
 :root {
   --burnt:#BF5700; --burnt2:#8f4100; --ink:#151515; --paper:#f6f0e9;
@@ -67,6 +67,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
 .lockedNote{background:#fff0dd;border:1px solid #e8bd89;border-radius:10px;padding:10px;font-size:12px;color:#704315}
 .historyCard{border:1px solid var(--line);border-radius:12px;padding:12px;background:white;margin-bottom:8px;display:flex;justify-content:space-between;gap:12px;align-items:center}
 .gradeWIN{color:var(--good);font-weight:950}.gradeLOSS{color:var(--bad);font-weight:950}.gradePUSH{color:var(--gold);font-weight:950}
+.importgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.importarea{width:100%;min-height:190px;border:1px solid var(--line);border-radius:10px;padding:10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}.importStatus{margin-top:12px;padding:12px;border-radius:10px;background:#eee5dc;line-height:1.45}.importStatus.good{background:#e7f4eb;color:#255f3d}.importStatus.bad{background:#fae7e4;color:#8c2f27}@media(max-width:900px){.importgrid{grid-template-columns:1fr}}
 @media(max-width:560px){.weekbar{padding-left:12px;padding-right:12px}.intelgrid{grid-template-columns:1fr}.scoregrid{grid-template-columns:1fr 1fr}.scoregrid .btn{grid-column:1/-1}}
 
 
@@ -86,6 +87,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
   </div>
   <nav id="nav">
     <button data-view="war" class="active">War Room</button>
+    <button data-view="importer">Weekly Import</button>
     <button data-view="lab">Model Lab</button>
     <button data-view="ratings">Ratings</button>
     <button data-view="staff">BOK vs. World</button>
@@ -103,6 +105,11 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
 <div id="runtimeError" style="display:none;background:#8b1e14;color:white;padding:10px 22px;font-weight:800"></div>
 <div class="validationBanner"><div id="validationCard" class="validationCard ok">DATA INTEGRITY: CHECKING…</div></div>
 <main>
+<section id="importer" class="view">
+<div class="hero"><div class="panel"><div class="panelhead orange"><h2>Weekly Import Center</h2><span>V3.0 pipeline</span></div><div class="pad rules">Build a new weekly card from raw SP+ ratings, P&amp;R talent ranks and the frozen Splash slate. The War Room standardizes SP+, applies the inverse-normal talent transform, calculates the 80/20 V3 rating, derives fair lines and ATS picks, then runs the integrity gate before the week can be locked.</div></div><div class="panel"><div class="panelhead"><h3>Import Rules</h3></div><div class="pad rules"><b>Ratings CSV:</b> Team, SP+ Rating, P&amp;R Talent Rank<br><b>Slate CSV:</b> Away, Home, Neutral, Splash Favorite, Splash Spread<br><br>Neutral accepts TRUE/FALSE. Splash Spread is the favorite's signed line, e.g. -29.5.</div></div></div>
+<div class="importgrid"><div class="panel"><div class="panelhead"><h3>1 · Ratings</h3><span>138 teams</span></div><div class="pad"><textarea id="ratingsImport" class="importarea" placeholder="Team,SP+ Rating,P&R Talent Rank&#10;Texas,22.8,1&#10;..."></textarea></div></div><div class="panel"><div class="panelhead"><h3>2 · Frozen Slate</h3><span>Official BOK card</span></div><div class="pad"><textarea id="slateImport" class="importarea" placeholder="Away,Home,Neutral,Splash Favorite,Splash Spread&#10;Texas State,Texas,FALSE,Texas,-29.5&#10;..."></textarea></div></div></div>
+<div class="panel" style="margin-top:18px"><div class="panelhead orange"><h3>3 · Build Snapshot</h3><span>No subjective adjustments</span></div><div class="pad"><div class="formgrid"><input id="importWeek" type="number" min="1" max="20" placeholder="Week"><input id="snapshotDate" type="date"><input id="splashLock" placeholder="Splash lock, e.g. 2026-09-08 12:00 PM CT"><button class="btn" id="buildWeekBtn">Validate & Build Week</button></div><div id="importStatus" class="importStatus">Paste both CSV datasets, set the week metadata, then validate.</div></div></div>
+</section>
 <section id="war" class="view active">
   <div class="hero">
     <div class="panel"><div class="panelhead orange"><h2>Week 1 Command Center</h2><span>Snapshot: Sep. 4, 2026</span></div><div class="pad rules">Official objective: beat the frozen Splash Sports competition spread. The War Room uses the post-Week-0 dynamic V3.0 ratings snapshot while preserving the Sept. 1 Splash lines. Every historical week remains immutable after lock.</div></div>
@@ -210,6 +217,7 @@ let state=loadState();
 const ratings=BASE.ratings.map(r=>({...r}));
 [...ratings].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>{ r['V3 Rank']=i+1; });
 function currentWeek(){ return state.weeks[String(state.activeWeek)]; }
+function syncWeekRatings(){const r=currentWeek()?.snapshot?.ratings;if(Array.isArray(r)&&r.length){ratings.splice(0,ratings.length,...r);}}
 function currentGames(){ return currentWeek().games || []; }
 function save(){ try{localStorage.setItem(KEY,JSON.stringify(state));}catch(err){console.warn('Save failed',err);} }
 
@@ -379,15 +387,41 @@ function newWeek(){
   state.weeks[String(w)]={week:w,status:'DRAFT',locked:false,lockTimestamp:null,games:[],results:{},snapshot:{modelVersion:'V3.0',snapshotDate:null,splashLock:null,rules:BASE.meta.rules}};
   state.activeWeek=w;save();renderAll();
 }
+
+function csvRows(text){
+  const lines=String(text||'').trim().split(/\r?\n/).filter(x=>x.trim()); if(lines.length<2)throw new Error('CSV needs a header and data rows.');
+  const parse=line=>{let out=[],cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}else if(c===','&&!q){out.push(cur.trim());cur='';}else cur+=c;}out.push(cur.trim());return out;};
+  const h=parse(lines[0]); return lines.slice(1).map(line=>{const v=parse(line),o={};h.forEach((k,i)=>o[k]=v[i]??'');return o;});
+}
+function invNorm(p){
+  const a=[-39.6968302866538,220.946098424521,-275.928510446969,138.357751867269,-30.6647980661472,2.50662827745924],b=[-54.4760987982241,161.585836858041,-155.698979859887,66.8013118877197,-13.2806815528857],c=[-.00778489400243029,-.322396458041136,-2.40075827716184,-2.54973253934373,4.37466414146497,2.93816398269878],d=[.00778469570904146,.32246712907004,2.445134137143,3.75440866190742],pl=.02425,ph=1-pl;let q,r;if(p<pl){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}if(p>ph){q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}q=p-.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+}
+function buildWeeklySnapshot(){
+  const box=document.getElementById('importStatus'); try{
+    const week=Number(document.getElementById('importWeek').value),date=document.getElementById('snapshotDate').value,lock=document.getElementById('splashLock').value.trim();
+    if(!Number.isInteger(week)||week<1||week>20)throw new Error('Enter a valid week number.'); if(!date)throw new Error('Snapshot date is required.'); if(!lock)throw new Error('Frozen Splash lock timestamp is required.');
+    if(state.weeks[String(week)]?.locked)throw new Error(`Week ${week} is already locked and immutable.`);
+    const rr=csvRows(document.getElementById('ratingsImport').value); if(rr.length!==138)throw new Error(`Expected 138 ratings rows; found ${rr.length}.`);
+    const teams=new Set(), talents=new Set(); let raw=rr.map((x,i)=>{const Team=x.Team?.trim(),sp=Number(x['SP+ Rating']),tr=Number(x['P&R Talent Rank']);if(!Team||!Number.isFinite(sp)||!Number.isInteger(tr)||tr<1||tr>138)throw new Error(`Invalid ratings row ${i+2}.`);if(teams.has(Team))throw new Error(`Duplicate team: ${Team}.`);if(talents.has(tr))throw new Error(`Duplicate P&R talent rank #${tr}.`);teams.add(Team);talents.add(tr);return {Team,sp,tr};});
+    const mean=raw.reduce((a,x)=>a+x.sp,0)/raw.length,sd=Math.sqrt(raw.reduce((a,x)=>a+(x.sp-mean)**2,0)/(raw.length-1)); if(!sd)throw new Error('SP+ standard deviation is zero.');
+    let built=raw.map(x=>{const spz=(x.sp-mean)/sd,tz=invNorm((138-x.tr+.5)/138),cz=.8*spz+.2*tz,v3=mean+cz*sd;return {Team:x.Team,'SP+ Rating':x.sp,'P&R Talent Rank':x.tr,'SP+ Z':spz,'Talent Z':tz,'Composite Z':cz,'V3 Rating':v3,'V3 Rank':0,'Input Week':week,'SP+ Source Date':date,'P&R Source Date':date,Notes:`Week ${week} dynamic snapshot`};});
+    [...built].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>r['V3 Rank']=i+1);
+    const by=Object.fromEntries(built.map(r=>[r.Team,r])),sr=csvRows(document.getElementById('slateImport').value); if(!sr.length)throw new Error('Slate has no games.');
+    const games=sr.map((x,i)=>{const Away=x.Away?.trim(),Home=x.Home?.trim(),neutral=/^(true|yes|1|neutral)$/i.test(x.Neutral||''),fav=x['Splash Favorite']?.trim(),spread=Number(x['Splash Spread']);if(!by[Away]||!by[Home])throw new Error(`Slate row ${i+2}: team missing from ratings.`);if(fav!==Away&&fav!==Home)throw new Error(`Slate row ${i+2}: Splash Favorite must be Away or Home team.`);if(!Number.isFinite(spread)||spread>0)throw new Error(`Slate row ${i+2}: Splash Spread must be a signed favorite line (0 or negative).`);const hfa=neutral?0:2.5,hm=by[Home]['V3 Rating']-by[Away]['V3 Rating']+hfa,fairFav=hm>=0?Home:Away,fairAbs=Math.abs(hm),fair=`${fairFav} -${fairAbs.toFixed(1)}`,splashHome=fav===Home?-spread:spread,edge=Math.abs(hm-splashHome),pick=hm>splashHome?(Home+(spread===0?' PK':' '+(fav===Home?spread.toFixed(1):('+'+Math.abs(spread).toFixed(1))))):(Away+(spread===0?' PK':' '+(fav===Away?spread.toFixed(1):('+'+Math.abs(spread).toFixed(1)))));return {Season:2026,Week:week,Away,Home,'Neutral?':neutral,'Away V3':by[Away]['V3 Rating'],'Home V3':by[Home]['V3 Rating'],'HFA to Home':hfa,'Home Projected Margin':hm,'BOK Fair Line':fair,'Splash Favorite':fav,'Splash Fav Spread':spread,'ATS Pick':pick,'Model Edge':edge};});
+    ratings.splice(0,ratings.length,...built); BASE.ratings=built;
+    state.weeks[String(week)]={week,status:'PRELIMINARY',locked:false,lockTimestamp:null,games,results:{},snapshot:{modelVersion:'V3.0',snapshotDate:date,splashLock:lock,rules:BASE.meta.rules,ratings:built}};state.activeWeek=week;save();box.className='importStatus good';box.innerHTML=`✓ Week ${week} built successfully: <b>${built.length} ratings</b> · <b>${games.length} games</b>. Integrity gate passed locally; review the card before locking.`;renderAll();
+  }catch(e){box.className='importStatus bad';box.textContent='⚠ '+e.message;}
+}
+
 function exportSeason(){
-  const payload={app:'BOK War Room',schemaVersion:'0.3',season:2026,exportedAt:new Date().toISOString(),state};
+  const payload={app:'BOK War Room',schemaVersion:'0.4',season:2026,exportedAt:new Date().toISOString(),state};
   const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'}),a=document.createElement('a');
   a.href=URL.createObjectURL(blob);a.download='BOK_2026_Season_Backup.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
 }
 function importSeasonFile(file){
   const rd=new FileReader();rd.onload=()=>{try{const p=JSON.parse(rd.result);if(!p.state||!p.state.weeks)throw new Error('Not a BOK season backup');state=normalizeState(p.state);save();renderAll();alert('BOK season imported.');}catch(e){alert('Import failed: '+e.message);}};rd.readAsText(file);
 }
-function renderAll(){renderWeekSelector();document.getElementById('staffGame').innerHTML=currentGames().map(g=>`<option>${gameName(g)}</option>`).join('');renderWar();renderLab();renderRatings();renderStaff();renderResults();renderAutopsy();updateLock();}
+function renderAll(){syncWeekRatings();renderWeekSelector();document.getElementById('staffGame').innerHTML=currentGames().map(g=>`<option>${gameName(g)}</option>`).join('');renderWar();renderLab();renderRatings();renderStaff();renderResults();renderAutopsy();updateLock();}
 function renderAutopsy(){
  const wk=currentWeek(),results=Object.values(wk.results||{}),w=results.filter(x=>x.grade==='WIN').length,l=results.filter(x=>x.grade==='LOSS').length;
  document.getElementById('aGraded').textContent=results.length;document.getElementById('aWins').textContent=w;document.getElementById('aLosses').textContent=l;document.getElementById('aRate').textContent=(w+l)?(100*w/(w+l)).toFixed(1)+'%':'—';
@@ -422,6 +456,7 @@ document.getElementById('importBtn').onclick=()=>document.getElementById('import
 document.getElementById('importFile').onchange=e=>{if(e.target.files[0])importSeasonFile(e.target.files[0]);e.target.value='';};
 document.getElementById('weekSelect').onchange=e=>{state.activeWeek=Number(e.target.value);save();renderAll();};
 document.getElementById('newWeekBtn').onclick=newWeek;
+document.getElementById('buildWeekBtn').onclick=buildWeeklySnapshot;
 document.getElementById('drawerClose').onclick=()=>document.getElementById('intelDrawer').classList.remove('open');
 document.getElementById('staffGame').innerHTML=currentGames().map(g=>`<option>${gameName(g)}</option>`).join('');
 document.getElementById('addPick').onclick=()=>{const pick=document.getElementById('staffPick').value.trim();if(!pick)return alert('Enter the pick.');state.staffPicks.push({season:2026,week:state.activeWeek,picker:document.getElementById('staffPicker').value,game:document.getElementById('staffGame').value,pick,grade:document.getElementById('staffGrade').value,ts:new Date().toISOString()});document.getElementById('staffPick').value='';save();renderStaff();};
