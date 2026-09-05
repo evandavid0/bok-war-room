@@ -160,7 +160,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
 <section id="results" class="view">
   <div class="hero">
     <div class="panel"><div class="panelhead orange"><h2>Saturday Results Desk</h2><span id="resultsWeekLabel">Week 1</span></div><div class="pad rules">Enter final scores after games finish. The app grades the frozen BOK ATS pick against the frozen Splash line, calculates actual margin and projection error, and feeds the Model Autopsy automatically.</div></div>
-    <div class="panel"><div class="panelhead"><h3>Week Status</h3></div><div class="pad" id="resultStatus"></div></div>
+    <div class="panel"><div class="panelhead"><h3>Week Status</h3></div><div class="pad" id="resultStatus"></div><div class="pad" style="padding-top:0"><button class="btn" id="fetchResultsBtn">Fetch Week Results</button><div id="fetchResultsStatus" class="footerNote" style="margin-top:10px">Final scores only; frozen model inputs never change.</div></div></div>
   </div>
   <div class="panel tablewrap"><table><thead><tr><th>Game</th><th>Official Pick</th><th>Final Score</th><th>Actual Margin</th><th>ATS Grade</th><th>Margin Error</th><th>Action</th></tr></thead><tbody id="resultRows"></tbody></table></div>
 </section>
@@ -328,6 +328,36 @@ function atsGrade(g,awayScore,homeScore){
   const favCovered=ats>0;
   return (pickFav===favCovered)?'WIN':'LOSS';
 }
+
+function normTeamName(s){return String(s||'').toLowerCase().replace(/&/g,'and').replace(/[^a-z0-9]+/g,' ').replace(/\b(state|st)\b/g,'state').trim();}
+async function fetchWeekResults(){
+  const wk=currentWeek(),btn=document.getElementById('fetchResultsBtn'),status=document.getElementById('fetchResultsStatus');
+  btn.disabled=true;status.textContent='Fetching ESPN scoreboard…';
+  try{
+    const url=`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?week=${wk.week}&seasontype=2&groups=80&limit=400`;
+    const res=await fetch(url); if(!res.ok)throw new Error('Scoreboard request failed ('+res.status+').');
+    const data=await res.json(), events=Array.isArray(data.events)?data.events:[];
+    let found=0,finals=0,missing=[];
+    for(const g of currentGames()){
+      const a=normTeamName(g.Away),h=normTeamName(g.Home);
+      const ev=events.find(e=>{
+        const c=e.competitions?.[0]?.competitors||[]; const names=c.map(x=>normTeamName(x.team?.displayName||x.team?.shortDisplayName||x.team?.name));
+        return names.includes(a)&&names.includes(h);
+      });
+      if(!ev){missing.push(gameName(g));continue;} found++;
+      const comp=ev.competitions?.[0],cs=comp?.competitors||[],away=cs.find(x=>x.homeAway==='away'),home=cs.find(x=>x.homeAway==='home');
+      const isFinal=!!(ev.status?.type?.completed||comp?.status?.type?.completed);
+      if(!away||!home||!isFinal)continue;
+      const awayScore=Number(away.score),homeScore=Number(home.score); if(!Number.isFinite(awayScore)||!Number.isFinite(homeScore))continue;
+      const id=gameId(g),grade=atsGrade(g,awayScore,homeScore);
+      wk.results[id]={awayScore,homeScore,grade,enteredAt:new Date().toISOString(),source:'ESPN scoreboard',eventId:ev.id||null}; finals++;
+    }
+    save();renderResults();renderAutopsy();
+    status.textContent=`${finals} final${finals===1?'':'s'} imported · ${found}/${currentGames().length} slate games matched${missing.length?' · '+missing.length+' unmatched':''}.`;
+  }catch(e){status.textContent='⚠ '+e.message+' You can still enter scores manually.';}
+  finally{btn.disabled=false;}
+}
+
 function renderResults(){
   const wk=currentWeek(),games=currentGames();
   document.getElementById('resultsWeekLabel').textContent='Week '+wk.week;
@@ -478,6 +508,7 @@ document.getElementById('newWeekBtn').onclick=newWeek;
 document.getElementById('buildWeekBtn').onclick=buildWeeklySnapshot;
 document.getElementById('latestImportBtn').onclick=importLatestWeek;
 document.getElementById('drawerClose').onclick=()=>document.getElementById('intelDrawer').classList.remove('open');
+document.getElementById('fetchResultsBtn').onclick=fetchWeekResults;
 document.getElementById('staffGame').innerHTML=currentGames().map(g=>`<option>${gameName(g)}</option>`).join('');
 document.getElementById('addPick').onclick=()=>{const pick=document.getElementById('staffPick').value.trim();if(!pick)return alert('Enter the pick.');state.staffPicks.push({season:2026,week:state.activeWeek,picker:document.getElementById('staffPicker').value,game:document.getElementById('staffGame').value,pick,grade:document.getElementById('staffGrade').value,ts:new Date().toISOString()});document.getElementById('staffPick').value='';save();renderStaff();};
 document.getElementById('clearPicks').onclick=()=>{if(confirm('Clear all locally entered staff picks?')){state.staffPicks=[];save();renderStaff();}};
