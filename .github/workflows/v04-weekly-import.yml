@@ -1,0 +1,68 @@
+name: Install V0.4 Weekly Import Center
+on:
+  push:
+    paths: ['.github/workflows/v04-weekly-import.yml']
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch app
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('index.html'); s=p.read_text(encoding='utf-8')
+          if 'data-view="importer"' in s:
+              print('V0.4 already installed'); raise SystemExit(0)
+          s=s.replace('BOK War Room V0.3.3 — 2026','BOK War Room V0.4 — 2026',1)
+          s=s.replace('<button data-view="war" class="active">War Room</button>','<button data-view="war" class="active">War Room</button>\n    <button data-view="importer">Weekly Import</button>',1)
+          s=s.replace('@media(max-width:560px){.weekbar', '.importgrid{display:grid;grid-template-columns:1fr 1fr;gap:18px}.importarea{width:100%;min-height:190px;border:1px solid var(--line);border-radius:10px;padding:10px;font:12px ui-monospace,SFMono-Regular,Menlo,monospace}.importStatus{margin-top:12px;padding:12px;border-radius:10px;background:#eee5dc;line-height:1.45}.importStatus.good{background:#e7f4eb;color:#255f3d}.importStatus.bad{background:#fae7e4;color:#8c2f27}@media(max-width:900px){.importgrid{grid-template-columns:1fr}}\n@media(max-width:560px){.weekbar',1)
+          anchor='<section id="war" class="view active">'
+          section='''<section id="importer" class="view">
+          <div class="hero"><div class="panel"><div class="panelhead orange"><h2>Weekly Import Center</h2><span>V3.0 pipeline</span></div><div class="pad rules">Build a new weekly card from raw SP+ ratings, P&amp;R talent ranks and the frozen Splash slate. The War Room standardizes SP+, applies the inverse-normal talent transform, calculates the 80/20 V3 rating, derives fair lines and ATS picks, then runs the integrity gate before the week can be locked.</div></div><div class="panel"><div class="panelhead"><h3>Import Rules</h3></div><div class="pad rules"><b>Ratings CSV:</b> Team, SP+ Rating, P&amp;R Talent Rank<br><b>Slate CSV:</b> Away, Home, Neutral, Splash Favorite, Splash Spread<br><br>Neutral accepts TRUE/FALSE. Splash Spread is the favorite's signed line, e.g. -29.5.</div></div></div>
+          <div class="importgrid"><div class="panel"><div class="panelhead"><h3>1 · Ratings</h3><span>138 teams</span></div><div class="pad"><textarea id="ratingsImport" class="importarea" placeholder="Team,SP+ Rating,P&R Talent Rank&#10;Texas,22.8,1&#10;..."></textarea></div></div><div class="panel"><div class="panelhead"><h3>2 · Frozen Slate</h3><span>Official BOK card</span></div><div class="pad"><textarea id="slateImport" class="importarea" placeholder="Away,Home,Neutral,Splash Favorite,Splash Spread&#10;Texas State,Texas,FALSE,Texas,-29.5&#10;..."></textarea></div></div></div>
+          <div class="panel" style="margin-top:18px"><div class="panelhead orange"><h3>3 · Build Snapshot</h3><span>No subjective adjustments</span></div><div class="pad"><div class="formgrid"><input id="importWeek" type="number" min="1" max="20" placeholder="Week"><input id="snapshotDate" type="date"><input id="splashLock" placeholder="Splash lock, e.g. 2026-09-08 12:00 PM CT"><button class="btn" id="buildWeekBtn">Validate & Build Week</button></div><div id="importStatus" class="importStatus">Paste both CSV datasets, set the week metadata, then validate.</div></div></div>
+          </section>
+          '''
+          s=s.replace(anchor,section+anchor,1)
+          marker='function exportSeason(){'
+          js=r'''
+          function csvRows(text){
+            const lines=String(text||'').trim().split(/\r?\n/).filter(x=>x.trim()); if(lines.length<2)throw new Error('CSV needs a header and data rows.');
+            const parse=line=>{let out=[],cur='',q=false;for(let i=0;i<line.length;i++){const c=line[i];if(c==='"'){if(q&&line[i+1]==='"'){cur+='"';i++;}else q=!q;}else if(c===','&&!q){out.push(cur.trim());cur='';}else cur+=c;}out.push(cur.trim());return out;};
+            const h=parse(lines[0]); return lines.slice(1).map(line=>{const v=parse(line),o={};h.forEach((k,i)=>o[k]=v[i]??'');return o;});
+          }
+          function invNorm(p){
+            const a=[-39.6968302866538,220.946098424521,-275.928510446969,138.357751867269,-30.6647980661472,2.50662827745924],b=[-54.4760987982241,161.585836858041,-155.698979859887,66.8013118877197,-13.2806815528857],c=[-.00778489400243029,-.322396458041136,-2.40075827716184,-2.54973253934373,4.37466414146497,2.93816398269878],d=[.00778469570904146,.32246712907004,2.445134137143,3.75440866190742],pl=.02425,ph=1-pl;let q,r;if(p<pl){q=Math.sqrt(-2*Math.log(p));return (((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}if(p>ph){q=Math.sqrt(-2*Math.log(1-p));return -(((((c[0]*q+c[1])*q+c[2])*q+c[3])*q+c[4])*q+c[5])/((((d[0]*q+d[1])*q+d[2])*q+d[3])*q+1)}q=p-.5;r=q*q;return (((((a[0]*r+a[1])*r+a[2])*r+a[3])*r+a[4])*r+a[5])*q/(((((b[0]*r+b[1])*r+b[2])*r+b[3])*r+b[4])*r+1);
+          }
+          function buildWeeklySnapshot(){
+            const box=document.getElementById('importStatus'); try{
+              const week=Number(document.getElementById('importWeek').value),date=document.getElementById('snapshotDate').value,lock=document.getElementById('splashLock').value.trim();
+              if(!Number.isInteger(week)||week<1||week>20)throw new Error('Enter a valid week number.'); if(!date)throw new Error('Snapshot date is required.'); if(!lock)throw new Error('Frozen Splash lock timestamp is required.');
+              if(state.weeks[String(week)]?.locked)throw new Error(`Week ${week} is already locked and immutable.`);
+              const rr=csvRows(document.getElementById('ratingsImport').value); if(rr.length!==138)throw new Error(`Expected 138 ratings rows; found ${rr.length}.`);
+              const teams=new Set(), talents=new Set(); let raw=rr.map((x,i)=>{const Team=x.Team?.trim(),sp=Number(x['SP+ Rating']),tr=Number(x['P&R Talent Rank']);if(!Team||!Number.isFinite(sp)||!Number.isInteger(tr)||tr<1||tr>138)throw new Error(`Invalid ratings row ${i+2}.`);if(teams.has(Team))throw new Error(`Duplicate team: ${Team}.`);if(talents.has(tr))throw new Error(`Duplicate P&R talent rank #${tr}.`);teams.add(Team);talents.add(tr);return {Team,sp,tr};});
+              const mean=raw.reduce((a,x)=>a+x.sp,0)/raw.length,sd=Math.sqrt(raw.reduce((a,x)=>a+(x.sp-mean)**2,0)/(raw.length-1)); if(!sd)throw new Error('SP+ standard deviation is zero.');
+              let built=raw.map(x=>{const spz=(x.sp-mean)/sd,tz=invNorm((138-x.tr+.5)/138),cz=.8*spz+.2*tz,v3=mean+cz*sd;return {Team:x.Team,'SP+ Rating':x.sp,'P&R Talent Rank':x.tr,'SP+ Z':spz,'Talent Z':tz,'Composite Z':cz,'V3 Rating':v3,'V3 Rank':0,'Input Week':week,'SP+ Source Date':date,'P&R Source Date':date,Notes:`Week ${week} dynamic snapshot`};});
+              [...built].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>r['V3 Rank']=i+1);
+              const by=Object.fromEntries(built.map(r=>[r.Team,r])),sr=csvRows(document.getElementById('slateImport').value); if(!sr.length)throw new Error('Slate has no games.');
+              const games=sr.map((x,i)=>{const Away=x.Away?.trim(),Home=x.Home?.trim(),neutral=/^(true|yes|1|neutral)$/i.test(x.Neutral||''),fav=x['Splash Favorite']?.trim(),spread=Number(x['Splash Spread']);if(!by[Away]||!by[Home])throw new Error(`Slate row ${i+2}: team missing from ratings.`);if(fav!==Away&&fav!==Home)throw new Error(`Slate row ${i+2}: Splash Favorite must be Away or Home team.`);if(!Number.isFinite(spread)||spread>0)throw new Error(`Slate row ${i+2}: Splash Spread must be a signed favorite line (0 or negative).`);const hfa=neutral?0:2.5,hm=by[Home]['V3 Rating']-by[Away]['V3 Rating']+hfa,fairFav=hm>=0?Home:Away,fairAbs=Math.abs(hm),fair=`${fairFav} -${fairAbs.toFixed(1)}`,splashHome=fav===Home?-spread:spread,edge=Math.abs(hm-splashHome),pick=hm>splashHome?(Home+(spread===0?' PK':' '+(fav===Home?spread.toFixed(1):('+'+Math.abs(spread).toFixed(1))))):(Away+(spread===0?' PK':' '+(fav===Away?spread.toFixed(1):('+'+Math.abs(spread).toFixed(1)))));return {Season:2026,Week:week,Away,Home,'Neutral?':neutral,'Away V3':by[Away]['V3 Rating'],'Home V3':by[Home]['V3 Rating'],'HFA to Home':hfa,'Home Projected Margin':hm,'BOK Fair Line':fair,'Splash Favorite':fav,'Splash Fav Spread':spread,'ATS Pick':pick,'Model Edge':edge};});
+              ratings.splice(0,ratings.length,...built); BASE.ratings=built;
+              state.weeks[String(week)]={week,status:'PRELIMINARY',locked:false,lockTimestamp:null,games,results:{},snapshot:{modelVersion:'V3.0',snapshotDate:date,splashLock:lock,rules:BASE.meta.rules,ratings:built}};state.activeWeek=week;save();box.className='importStatus good';box.innerHTML=`✓ Week ${week} built successfully: <b>${built.length} ratings</b> · <b>${games.length} games</b>. Integrity gate passed locally; review the card before locking.`;renderAll();
+            }catch(e){box.className='importStatus bad';box.textContent='⚠ '+e.message;}
+          }
+          '''
+          s=s.replace(marker,js+'\n'+marker,1)
+          s=s.replace("function currentWeek(){ return state.weeks[String(state.activeWeek)]; }","function currentWeek(){ return state.weeks[String(state.activeWeek)]; }\nfunction syncWeekRatings(){const r=currentWeek()?.snapshot?.ratings;if(Array.isArray(r)&&r.length){ratings.splice(0,ratings.length,...r);}}",1)
+          s=s.replace('function renderAll(){renderWeekSelector();','function renderAll(){syncWeekRatings();renderWeekSelector();',1)
+          s=s.replace("document.getElementById('newWeekBtn').onclick=newWeek;","document.getElementById('newWeekBtn').onclick=newWeek;\ndocument.getElementById('buildWeekBtn').onclick=buildWeeklySnapshot;",1)
+          s=s.replace("schemaVersion:'0.3'","schemaVersion:'0.4'",1)
+          p.write_text(s,encoding='utf-8')
+      - name: Commit V0.4
+        run: |
+          git config user.name "BOK War Room Bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add index.html
+          git diff --cached --quiet || (git commit -m "Build V0.4 Weekly Import Center" && git push)
