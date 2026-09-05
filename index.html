@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BOK War Room V0.8.6 — 2026</title>
+<title>BOK War Room V0.8.7 — 2026</title>
 <style>
 :root {
   --burnt:#BF5700; --burnt2:#8f4100; --ink:#151515; --paper:#f6f0e9;
@@ -86,7 +86,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
 <header>
   <div class="topbar">
     <div class="brand"><h1>BOK WAR ROOM</h1><small>Burnt Orange Koolaid · 2026 College Football Command Center</small></div>
-    <div class="status"><span class="pill orange">V3.0 OFFICIAL</span><span class="pill" id="appVersion">APP V0.8.6</span><span class="pill warn" id="lockState">WEEK 1 · PRELIMINARY</span></div>
+    <div class="status"><span class="pill orange">V3.0 OFFICIAL</span><span class="pill" id="appVersion">APP V0.8.7</span><span class="pill warn" id="lockState">WEEK 1 · PRELIMINARY</span></div>
   </div>
   <nav id="nav">
     <button data-view="war" class="active">War Room</button>
@@ -472,7 +472,10 @@ async function fetchWeekResults(){
     const anchor=new Date(Date.UTC(2026,7,30));
     const start=new Date(anchor.getTime()+(wk.week-1)*7*86400000);
     const ymd=d=>d.toISOString().slice(0,10).replace(/-/g,'');
-    const days=Array.from({length:7},(_,i)=>new Date(start.getTime()+i*86400000));
+    // Week 1 spans the full Labor Day opening slate, including Sunday Sep 6
+    // and Monday Sep 7. Later BOK weeks use the standard seven-day window.
+    const dayCount=wk.week===1?9:7;
+    const days=Array.from({length:dayCount},(_,i)=>new Date(start.getTime()+i*86400000));
     const payloads=await Promise.all(days.map(async d=>{
       const url=`https://site.api.espn.com/apis/site/v2/sports/football/college-football/scoreboard?dates=${ymd(d)}&seasontype=2&groups=80&limit=400`;
       const res=await fetch(url,{cache:'no-store'});if(!res.ok)throw new Error(`Scoreboard request failed for ${ymd(d)} (${res.status}).`);
