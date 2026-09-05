@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>BOK War Room V0.8.5 — 2026</title>
+<title>BOK War Room V0.8.6 — 2026</title>
 <style>
 :root {
   --burnt:#BF5700; --burnt2:#8f4100; --ink:#151515; --paper:#f6f0e9;
@@ -86,7 +86,7 @@ canvas{width:100%;height:280px;background:white;border-radius:12px;border:1px so
 <header>
   <div class="topbar">
     <div class="brand"><h1>BOK WAR ROOM</h1><small>Burnt Orange Koolaid · 2026 College Football Command Center</small></div>
-    <div class="status"><span class="pill orange">V3.0 OFFICIAL</span><span class="pill" id="appVersion">APP V0.8.5</span><span class="pill warn" id="lockState">WEEK 1 · PRELIMINARY</span></div>
+    <div class="status"><span class="pill orange">V3.0 OFFICIAL</span><span class="pill" id="appVersion">APP V0.8.6</span><span class="pill warn" id="lockState">WEEK 1 · PRELIMINARY</span></div>
   </div>
   <nav id="nav">
     <button data-view="war" class="active">War Room</button>
@@ -418,14 +418,14 @@ const TEAM_ALIASES={
  'texas a and m':['texas a and m','texas am','texas a m','texas aandm','tamu'],
  'clemson':['clemson','clem'],
  'lsu':['lsu','louisiana state'],
- 'washington state':['washington state','washington st','wsu'],
- 'washington':['washington','uw'],
- 'wisconsin':['wisconsin','wis'],
- 'notre dame':['notre dame','nd'],
- 'louisville':['louisville','lou'],
- 'ole miss':['ole miss','mississippi','miss'],
- 'smu':['smu','southern methodist'],
- 'florida state':['florida state','florida st','fsu']
+ 'washington state':['washington state','washington st','washington state university','wash state','wazzu','wsu'],
+ 'washington':['washington','washington huskies','uw'],
+ 'wisconsin':['wisconsin','wisconsin badgers','wisc','wis'],
+ 'notre dame':['notre dame','notre dame fighting irish','nd'],
+ 'louisville':['louisville','louisville cardinals','ul','lou'],
+ 'ole miss':['ole miss','mississippi','mississippi rebels','olemiss','miss'],
+ 'smu':['smu','southern methodist','southern methodist university'],
+ 'florida state':['florida state','florida st','florida state seminoles','fsu']
 };
 function bokTeamAliases(name){
   const n=normTeamName(name),out=new Set([n]);
@@ -433,7 +433,7 @@ function bokTeamAliases(name){
   return out;
 }
 function espnTeamAliases(team){
-  const vals=[team?.displayName,team?.shortDisplayName,team?.name,team?.location,team?.abbreviation];
+  const vals=[team?.displayName,team?.shortDisplayName,team?.name,team?.location,team?.abbreviation,team?.slug];
   const out=new Set(vals.filter(Boolean).map(normTeamName));
   return out;
 }
