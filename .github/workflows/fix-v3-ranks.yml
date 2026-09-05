@@ -20,8 +20,7 @@ jobs:
           p=Path('index.html')
           s=p.read_text(encoding='utf-8')
           old="const ratings=BASE.ratings;"
-          new="""const ratings=BASE.ratings.map(r=>({...r}));
-[...ratings].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>{ r['V3 Rank']=i+1; });"""
+          new="const ratings=BASE.ratings.map(r=>({...r}));\n[...ratings].sort((a,b)=>b['V3 Rating']-a['V3 Rating']).forEach((r,i)=>{ r['V3 Rank']=i+1; });"
           if new in s:
               print('Rank derivation already installed.')
               raise SystemExit(0)
